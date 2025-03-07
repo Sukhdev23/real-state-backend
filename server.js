@@ -9,8 +9,8 @@ const cors = require('cors');
 const app = express();
 connectDB();
 
-app.use(cors({origin: "https://peachpuff-oryx-197319.hostingersite.com"}));
-app.use(express.json());
+app.use(cors());
+app.use(express.json({origin: "https://peachpuff-oryx-197319.hostingersite.com"}));
 // Serve the "uploads" folder as static
 app.use("/uploads", express.static("uploads"));
 // property router
