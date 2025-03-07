@@ -2,20 +2,29 @@ const express = require("express");
 const router = express.Router();
 const Property = require("../models/property");
 const multer = require("multer");
-const fs = require("fs");
+const { CloudinaryStorage } = require("multer-storage-cloudinary");
+const cloudinary = require("cloudinary").v2;
+require("dotenv").config();
 
-// Multer Configuration for File Uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, "./uploads");
-  },
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + "-" + file.originalname);
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+// Multer Storage for Cloudinary
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: "property_images",
+    format: async () => "jpg",
+    public_id: (req, file) => Date.now() + "-" + file.originalname,
   },
 });
 const upload = multer({ storage });
 
-// Delete a property (and remove images)
+// Delete a property (and remove images from Cloudinary)
 router.delete("/:id", async (req, res) => {
   const { id } = req.params;
   try {
@@ -24,13 +33,11 @@ router.delete("/:id", async (req, res) => {
       return res.status(404).json({ message: "Property not found" });
     }
 
-    // Delete images from server
-    deletedProperty.images.forEach((imagePath) => {
-      const localPath = `.${imagePath}`;
-      if (fs.existsSync(localPath)) {
-        fs.unlinkSync(localPath);
-      }
-    });
+    // Delete images from Cloudinary
+    for (const imageUrl of deletedProperty.images) {
+      const publicId = imageUrl.split("/").pop().split(".")[0]; // Extract public ID
+      await cloudinary.uploader.destroy(publicId);
+    }
 
     res.status(200).json({ message: "Property deleted successfully" });
   } catch (error) {
@@ -63,11 +70,11 @@ router.get("/", async (req, res) => {
   }
 });
 
-// Upload property with images
+// Upload property with images (Cloudinary)
 router.post("/upload-property", upload.array("images"), async (req, res) => {
   try {
     const { projectId, title, area, price, description, location, type } = req.body;
-    const imagePaths = req.files.map((file) => `${req.protocol}://${req.get("host")}/uploads/${file.filename}`);
+    const imagePaths = req.files.map((file) => file.path); // Cloudinary returns a URL
 
     const newProperty = new Property({
       projectId,
@@ -77,7 +84,7 @@ router.post("/upload-property", upload.array("images"), async (req, res) => {
       description,
       location,
       type,
-      images: imagePaths,
+      images: imagePaths, // Store Cloudinary URLs
     });
 
     await newProperty.save();
