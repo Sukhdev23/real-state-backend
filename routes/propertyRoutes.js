@@ -1,7 +1,8 @@
 const express = require("express");
 const router = express.Router();
-const Property = require("../models/property"); // Assuming you have a Property model for MongoDB
+const Property = require("../models/property");
 const multer = require("multer");
+const fs = require("fs");
 
 // Multer Configuration for File Uploads
 const storage = multer.diskStorage({
@@ -14,7 +15,7 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// Delete a property
+// Delete a property (and remove images)
 router.delete("/:id", async (req, res) => {
   const { id } = req.params;
   try {
@@ -22,7 +23,16 @@ router.delete("/:id", async (req, res) => {
     if (!deletedProperty) {
       return res.status(404).json({ message: "Property not found" });
     }
-    res.status(200).json({ message: "Property deleted successfully", deletedProperty });
+
+    // Delete images from server
+    deletedProperty.images.forEach((imagePath) => {
+      const localPath = `.${imagePath}`;
+      if (fs.existsSync(localPath)) {
+        fs.unlinkSync(localPath);
+      }
+    });
+
+    res.status(200).json({ message: "Property deleted successfully" });
   } catch (error) {
     res.status(500).json({ message: "Server error", error });
   }
@@ -43,25 +53,22 @@ router.put("/:id", async (req, res) => {
   }
 });
 
-// GET: Fetch all properties
+// Fetch all properties
 router.get("/", async (req, res) => {
   try {
     const properties = await Property.find();
     res.status(200).json(properties);
   } catch (error) {
-    console.error("Error fetching properties:", error);
     res.status(500).json({ message: "Failed to fetch properties." });
   }
 });
 
-
-// POST: Upload property
-router.post("/uploads", upload.array("images"), async (req, res) => {
+// Upload property with images
+router.post("/upload-property", upload.array("images"), async (req, res) => {
   try {
-    const { projectId, title, area, price, description, location , type} = req.body;
-    const imagePaths = req.files.map((file) => `/uploads/${file.filename}`);
+    const { projectId, title, area, price, description, location, type } = req.body;
+    const imagePaths = req.files.map((file) => `${req.protocol}://${req.get("host")}/uploads/${file.filename}`);
 
-    // Create a new property entry
     const newProperty = new Property({
       projectId,
       title,
@@ -70,46 +77,44 @@ router.post("/uploads", upload.array("images"), async (req, res) => {
       description,
       location,
       type,
-      images: imagePaths, // Store Base64 strings in MongoDB
+      images: imagePaths,
     });
 
     await newProperty.save();
     res.status(201).json({ message: "Property uploaded successfully!", property: newProperty });
   } catch (error) {
-    console.error("Error uploading property:", error);
     res.status(500).json({ message: "Failed to upload property." });
   }
 });
 
-// Example: Express.js API endpoint
-router.get("/api/properties", async (req, res) => {
+// Filter properties
+router.get("/filter", async (req, res) => {
   const { query, type, budget } = req.query;
-
-  // Construct filter object based on query parameters
   const filters = {};
-  if (query) {
-    filters.title = { $regex: query, $options: "i" }; // Case-insensitive match for title
-  }
-  if (type) {
-    filters.type = type;
-  }
+
+  if (query) filters.title = { $regex: query, $options: "i" };
+  if (type) filters.type = type;
   if (budget) {
-    const budgetRange = getBudgetRange(budget); // Define a function to map budget to min/max values
-    if (budgetRange) {
-      filters.price = { $gte: budgetRange.min, $lte: budgetRange.max };
-    }
+    const budgetRange = getBudgetRange(budget);
+    if (budgetRange) filters.price = { $gte: budgetRange.min, $lte: budgetRange.max };
   }
 
   try {
-    const properties = await Property.find(filters); // Assuming `Property` is your MongoDB model
+    const properties = await Property.find(filters);
     res.json(properties);
   } catch (error) {
-    console.error("Error fetching properties:", error);
     res.status(500).send("Error fetching properties");
   }
 });
 
-
-
+// Function to map budget to min/max values
+function getBudgetRange(budget) {
+  const ranges = {
+    low: { min: 0, max: 500000 },
+    medium: { min: 500000, max: 2000000 },
+    high: { min: 2000000, max: 10000000 },
+  };
+  return ranges[budget] || null;
+}
 
 module.exports = router;
