@@ -17,9 +17,6 @@ app.use(cors({
 
 app.use(express.json());
 
-// Serve the "uploads" folder as static
-app.use("/uploads", express.static("uploads"));
-
 // Property router
 app.use("/api/properties", propertyRoutes);
 

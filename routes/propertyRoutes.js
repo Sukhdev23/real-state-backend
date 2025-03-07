@@ -7,7 +7,7 @@ const cloudinary = require("cloudinary").v2;
 require("dotenv").config();
 
 // Configure Cloudinary
-cloudinary.config({
+console.log("Cloudinary Config:", {
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
@@ -70,7 +70,6 @@ router.get("/", async (req, res) => {
   }
 });
 
-// Upload property with images (Cloudinary)
 router.post("/upload-property", upload.array("images"), async (req, res) => {
   try {
     const { projectId, title, area, price, description, location, type } = req.body;
@@ -90,9 +89,11 @@ router.post("/upload-property", upload.array("images"), async (req, res) => {
     await newProperty.save();
     res.status(201).json({ message: "Property uploaded successfully!", property: newProperty });
   } catch (error) {
-    res.status(500).json({ message: "Failed to upload property." });
+    console.log("Upload Property Error:", error); // 👈 Yeh add karo
+    res.status(500).json({ message: "Failed to upload property.", error });
   }
 });
+
 
 // Filter properties
 router.get("/filter", async (req, res) => {
